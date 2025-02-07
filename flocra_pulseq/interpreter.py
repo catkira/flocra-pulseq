@@ -85,7 +85,7 @@ class PSInterpreter:
             '[TRAP]' : self._read_trap_events,
             '[ADC]' : self._read_adc_events,
             '[DELAYS]' : self._read_delay_events,
-            '[EXTENSIONS]' : self._read_temp, # Unused
+            '[EXTENSIONS]' : self._read_extensions,
             '[SHAPES]' : self._read_shapes
         }
 
@@ -101,6 +101,7 @@ class PSInterpreter:
         self._delay_events = {}
         self._shapes = {}
         self._definitions = {}
+        self._extensions = {}
 
         # Interpolated and compiled data for output
         self._tx_durations = {} # us
@@ -199,7 +200,7 @@ class PSInterpreter:
         else:
             # version >= 1.4
             var_names = ('rf', 'gx', 'gy', 'gz', 'adc', 'ext')
-            var_dicts = [self._rf_events, self._grad_events, self._grad_events, self._grad_events, self._adc_events, {}]
+            var_dicts = [self._rf_events, self._grad_events, self._grad_events, self._grad_events, self._adc_events, self._extensions]
             for block in self._blocks.values():
                 for i in range(len(var_names)):
                     id_n = block[var_names[i]]
@@ -1089,6 +1090,26 @@ class PSInterpreter:
                 self._logger.debug(f'Read in {varname}')
 
         self._logger.info('Definitions: Complete')
+
+        return rline
+    
+    def _read_extensions(self, f):
+        rline = ''
+        line = ''
+        self._logger.info('Extensions: Reading...')
+        while True:
+            line = f.readline()
+            rline = self._simplify(line)
+            if line == '' or rline in self._pulseq_keys: break
+
+            tmp = rline.split()
+            
+            if len(tmp) > 0 and tmp[0] == 'extension': break
+
+            if len(tmp) > 0:
+                self._extensions[int(tmp[0])] = 0
+
+        self._logger.info('Extensions: Complete')
 
         return rline
 
