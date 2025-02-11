@@ -134,6 +134,7 @@ class PSInterpreter:
                 gx_max=self._grad_max['gx'], gy_max=self._grad_max['gy'], gz_max=self._grad_max['gz'],
                 clk_t=self._clk_t, tx_t=self._tx_t, grad_t=self._grad_t)
         self._read_pulseq(pulseq_file)
+        print(self._definitions)
         self._compile_tx_data()
         self._compile_grad_data()
         self.out_data, self.readout_number = self._stream_all_blocks()
@@ -273,6 +274,10 @@ class PSInterpreter:
                 event_duration = event_len * self._tx_t # us
                 self._error_if(event_len < 1, f"Zero length shape: {tx_event['mag_id']}")
                 x = np.linspace(0, event_duration, num = event_len, endpoint=False)
+                # Scale and convert to complex Tx envelope
+                mag = mag_shape * tx_event['amp'] / self._rf_amp_max
+                phase = phase_shape * 2 * np.pi
+                tx_env = np.exp((phase + tx_event['phase']) * 1j) * mag
             else:
                 if tx_event['time_shape_id'] == 0:
                     # Event length and duration, create time points
@@ -280,16 +285,38 @@ class PSInterpreter:
                     event_duration = event_len * self._tx_t # us
                     self._error_if(event_len < 1, f"Zero length shape: {tx_event['mag_id']}")
                     x = np.linspace(0, event_duration, num = event_len, endpoint=False)
+                    # Scale and convert to complex Tx envelope
+                    mag = mag_shape * tx_event['amp'] / self._rf_amp_max
+                    phase = phase_shape * 2 * np.pi
+                    tx_env = np.exp((phase + tx_event['phase']) * 1j) * mag
                 else:
                     # Event length and duration, create time points
                     event_len = max(self._shapes[tx_event['time_shape_id']]) # unitless
-                    event_duration = event_len * self._definitions['RadiofrequencyRasterTime'] * 1e6# us
-                    x = self._shapes[tx_event['time_shape_id']] * self._definitions['RadiofrequencyRasterTime'] * 1e6
-
-            # Scale and convert to complex Tx envelope
-            mag = mag_shape * tx_event['amp'] / self._rf_amp_max
-            phase = phase_shape * 2 * np.pi
-            tx_env = np.exp((phase + tx_event['phase']) * 1j) * mag
+                    event_duration = event_len * self._definitions['RadiofrequencyRasterTime'] * 1e6 # us
+                    # print(f'tx event_duration {event_duration}')
+                    x = self._shapes[tx_event['time_shape_id']] * self._definitions['RadiofrequencyRasterTime']
+                    shape = self._shapes[tx_event['time_shape_id']]
+                    
+                    self._error_if(event_len < 1, f"Zero length shape: {tx_event['mag_id']}")
+                    mag_ip = []
+                    phase_ip = []
+                    x_ip = []
+                    self._error_if(len(shape) == 1, f'Shapes of length 1 are not supported!')                            
+                    for i in range(len(shape) - 1):
+                        delta_t = int(self._shapes[tx_event['time_shape_id']][i + 1] - self._shapes[tx_event['time_shape_id']][i])
+                        shape_x = self._shapes[tx_event['time_shape_id']]
+                        if delta_t > 1:
+                            mag_ip.append(np.linspace(mag_shape[i], mag_shape[i+1], num = delta_t))
+                            phase_ip.append(np.linspace(phase_shape[i], phase_shape[i+1], num = delta_t))
+                            x_ip.append(np.linspace(shape_x[i], shape_x[i+1], num = delta_t))
+                        else:
+                            mag_ip.append(mag_shape[i])
+                            phase_ip.append(phase_shape[i])
+                            x_ip.append(shape_x[i])
+                    mag = np.hstack([np.array(item).flatten() for item in mag_ip]) * tx_event['amp'] / self._rf_amp_max
+                    phase = np.hstack([np.array(item).flatten() for item in phase_ip])
+                    tx_env = np.exp((phase + tx_event['phase']) * 1j) * mag
+                    x = np.hstack([np.array(item).flatten() for item in x_ip]) * self._definitions['RadiofrequencyRasterTime'] * 1e6
 
             self._error_if(np.any(np.abs(tx_env) > 1.0), f'Magnitude of RF event {tx_id} is too ' \
                 f'large relative to RF max {np.max(np.abs(mag_shape * tx_event["amp"]))} > {self._rf_amp_max}')
@@ -303,6 +330,7 @@ class PSInterpreter:
             self._tx_durations[tx_id] = event_duration + tx_event['delay']
             self._tx_times[tx_id] = x + tx_event['delay']
             self._tx_data[tx_id] = tx_env
+            # print(f"id:{tx_id} env:{tx_env} times:{self._tx_times[tx_id]}")
 
         self._logger.info('Tx data compiled')
 
@@ -356,6 +384,7 @@ class PSInterpreter:
                         shape = self._shapes[grad_event['shape_id']]
                         event_len = max(self._shapes[grad_event['time_shape_id']])
                         event_duration = event_len * self._definitions['GradientRasterTime'] * 1e6
+                        # print(f'grad event_duration {event_duration}')
                         self._error_if(event_len < 1, f"Zero length shape: {grad_event['shape_id']}")
                         grad_ip = []
                         x_ip = []
