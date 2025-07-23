@@ -224,12 +224,13 @@ class PSInterpreter:
                 base_id = rf_id
                 base_str = 'RF'
             self._error_if(rf['freq'] != freq, f"Frequency offset of RF event {rf_id} ({rf['freq']}) doesn't match that of {base_str} event {base_id} ({freq})")
-        for adc_id, adc in self._adc_events.items():
-            if freq is None:
-                freq = adc['freq']
-                base_id = adc_id
-                base_str = 'ADC'
-            self._error_if(adc['freq'] != freq, f"Frequency offset of ADC event {adc_id} ({adc['freq']}) doesn't match that of {base_str} event {base_id} ({freq})")
+        # translated sequences have different frequency offsets for ADC events, therefore disable this check
+        # for adc_id, adc in self._adc_events.items():
+        #     if freq is None:
+        #         freq = adc['freq']
+        #         base_id = adc_id
+        #         base_str = 'ADC'
+        #     self._error_if(adc['freq'] != freq, f"Frequency offset of ADC event {adc_id} ({adc['freq']}) doesn't match that of {base_str} event {base_id} ({freq})")
         if freq is not None and freq != 0:
             self._rf_center += freq
             self._logger.info(f'Adding freq offset {freq} Hz. New center / linear oscillator frequency: {self._rf_center}')
